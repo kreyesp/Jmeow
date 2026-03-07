@@ -3,11 +3,118 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Record</title>
+  <title>Jmeow</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0f0f0f;
+      color: #f0f0f0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 20px;
+      padding: 48px 56px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      width: 340px;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    .mic-ring {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: #111;
+      border: 2px solid #2a2a2a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .mic-ring.recording {
+      border-color: #e05;
+      box-shadow: 0 0 24px rgba(238, 0, 85, 0.4);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 16px rgba(238, 0, 85, 0.3); }
+      50%       { box-shadow: 0 0 36px rgba(238, 0, 85, 0.6); }
+    }
+
+    .mic-ring svg {
+      width: 36px;
+      height: 36px;
+      fill: #555;
+      transition: fill 0.3s;
+    }
+
+    .mic-ring.recording svg { fill: #e05; }
+
+    #btn {
+      background: #f0f0f0;
+      color: #0f0f0f;
+      border: none;
+      border-radius: 10px;
+      padding: 14px 36px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
+    }
+
+    #btn:hover { background: #ddd; }
+    #btn:active { transform: scale(0.97); }
+
+    #btn.recording {
+      background: #e05;
+      color: #fff;
+    }
+
+    #btn.recording:hover { background: #c00; }
+
+    #status {
+      font-size: 0.82rem;
+      color: #555;
+      min-height: 18px;
+      text-align: center;
+    }
+
+    #status.active { color: #aaa; }
+  </style>
 </head>
 <body>
-  <button id="btn" onclick="toggle()">Start Recording</button>
-  <p id="status"></p>
+  <div class="card">
+    <h1>Voice Input</h1>
+
+    <div class="mic-ring" id="ring">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8 8 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/>
+      </svg>
+    </div>
+
+    <button id="btn" onclick="toggle()">Start Recording</button>
+    <p id="status"></p>
+  </div>
 
   <script>
     let mediaRecorder, chunks = [];
@@ -30,16 +137,28 @@
         const form = new FormData();
         form.append('file', blob, 'recording.webm');
 
-        document.getElementById('status').textContent = 'Uploading...';
+        setStatus('Uploading...');
         const res = await fetch('/upload_audio', { method: 'POST', body: form });
         const data = await res.json();
-        document.getElementById('status').textContent = `Saved: ${data.filename}`;
-        document.getElementById('btn').textContent = 'Start Recording';
+        setStatus(`Saved: ${data.filename}`);
+        setRecording(false);
       };
 
       mediaRecorder.start();
-      document.getElementById('btn').textContent = 'Stop Recording';
-      document.getElementById('status').textContent = 'Recording...';
+      setRecording(true);
+      setStatus('Recording...');
+    }
+
+    function setRecording(on) {
+      document.getElementById('btn').textContent = on ? 'Stop Recording' : 'Start Recording';
+      document.getElementById('btn').classList.toggle('recording', on);
+      document.getElementById('ring').classList.toggle('recording', on);
+    }
+
+    function setStatus(msg) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.classList.toggle('active', !!msg);
     }
   </script>
 </body>

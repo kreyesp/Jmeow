@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Record</title>
+</head>
+<body>
+  <button id="btn" onclick="toggle()">Start Recording</button>
+  <p id="status"></p>
+
+  <script>
+    let mediaRecorder, chunks = [];
+
+    async function toggle() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      chunks = [];
+
+      mediaRecorder.ondataavailable = e => chunks.push(e.data);
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+        const form = new FormData();
+        form.append('file', blob, 'recording.webm');
+
+        document.getElementById('status').textContent = 'Uploading...';
+        const res = await fetch('/upload_audio', { method: 'POST', body: form });
+        const data = await res.json();
+        document.getElementById('status').textContent = `Saved: ${data.filename}`;
+        document.getElementById('btn').textContent = 'Start Recording';
+      };
+
+      mediaRecorder.start();
+      document.getElementById('btn').textContent = 'Stop Recording';
+      document.getElementById('status').textContent = 'Recording...';
+    }
+  </script>
+</body>
+</html>

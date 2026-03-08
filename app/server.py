@@ -79,10 +79,10 @@ async def upload_audio(file: UploadFile = File(...)):
 
     sentiment_response = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=[{"role": "user", "content": f"Analyze the sentiment of this text in one word (e.g. happy, sad, angry, anxious, neutral): \"{transcript}\""}],
-        temperature=0.2,
+        messages=[{"role": "user", "content": f"Classify the sentiment of this text into exactly one word from this list: happy, sad, mad, love, anxious, neutral. Reply with only the one word.\n\nText: \"{transcript}\""}],
+        temperature=0,
     )
-    sentiment = sentiment_response.choices[0].message.content.strip()
+    sentiment = sentiment_response.choices[0].message.content.strip().lower()
     print(f"Sentiment: {sentiment}")
 
     with open("voice_data.json", "w") as f:

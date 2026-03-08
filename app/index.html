@@ -140,7 +140,7 @@
         setStatus('Uploading...');
         const res = await fetch('/upload_audio', { method: 'POST', body: form });
         const data = await res.json();
-        setStatus(`Saved: ${data.filename}`);
+        setStatus(data.transcript || 'Uploaded!');
         setRecording(false);
       };
 

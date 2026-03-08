@@ -1,9 +1,15 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from dotenv import load_dotenv
+from openai import OpenAI
 import shutil
-import uuid
+import json
 import os
+from datetime import datetime
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -58,8 +64,28 @@ async def send_to_arduino(payload: dict):
 # --- Audio upload from index.html ---
 @app.post("/upload_audio")
 async def upload_audio(file: UploadFile = File(...)):
-    filename = f"{AUDIO_DIR}/audio_{uuid.uuid4()}.webm"
+    filename = f"{AUDIO_DIR}/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.webm"
     with open(filename, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     print(f"Saved: {filename}")
-    return {"status": "received", "filename": filename}
+
+    with open(filename, "rb") as audio_file:
+        transcription = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+        )
+    transcript = transcription.text
+    print(f"Transcript: {transcript}")
+
+    sentiment_response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[{"role": "user", "content": f"Analyze the sentiment of this text in one word (e.g. happy, sad, angry, anxious, neutral): \"{transcript}\""}],
+        temperature=0.2,
+    )
+    sentiment = sentiment_response.choices[0].message.content.strip()
+    print(f"Sentiment: {sentiment}")
+
+    with open("voice_data.json", "w") as f:
+        json.dump({"transcript": transcript, "sentiment": sentiment}, f, indent=2)
+
+    return {"status": "received", "filename": filename, "transcript": transcript, "sentiment": sentiment}

@@ -1,17 +1,31 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from openai import OpenAI
+import asyncio
+import subprocess
 import shutil
 import json
 import os
+import sys
 from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(__file__))
+import clean
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    asyncio.create_task(input_watcher())
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,43 +37,103 @@ app.add_middleware(
 AUDIO_DIR = "received_audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# Track connected Arduinos
-connected_arduinos: list[WebSocket] = []
+BASE_DIR = os.path.dirname(__file__)
+input_path = os.path.join(BASE_DIR, "input_data.json")
+output_path = os.path.join(BASE_DIR, "output.json")
+
+# Track connected Arduinos by name
+connected_arduinos: dict[str, WebSocket] = {}
+
+
+async def run_pipeline():
+    """Run output.py then send output.json to the receiver Arduino."""
+    print("[pipeline] running output.py...")
+    result = subprocess.run(
+        ["python", os.path.join(BASE_DIR, "output.py")],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print(f"[pipeline] output.py error:\n{result.stderr}")
+        return
+    print(f"[pipeline] output.py done: {result.stdout.strip()}")
+
+    if not os.path.exists(output_path):
+        print("[pipeline] output.json not found, skipping send")
+        return
+
+    with open(output_path) as f:
+        payload = json.load(f)
+
+    receiver = connected_arduinos.get("receiver")
+    if receiver:
+        await receiver.send_text(json.dumps(payload))
+        print(f"[pipeline] sent to receiver: {payload}")
+    else:
+        print(f"[pipeline] receiver not connected, output.json ready but not sent")
+
+
+async def input_watcher():
+    """Watch input_data.json for changes and auto-trigger the pipeline."""
+    async def watcher():
+        last_mtime = None
+        while True:
+            try:
+                mtime = os.path.getmtime(input_path)
+                if last_mtime is not None and mtime != last_mtime:
+                    print("[watcher] input_data.json changed — triggering pipeline")
+                    await run_pipeline()
+                last_mtime = mtime
+            except FileNotFoundError:
+                pass
+            await asyncio.sleep(1)
+
+    asyncio.create_task(watcher())
+
 
 @app.get("/")
 def index():
     return FileResponse("index.html")
 
-# --- WebSocket: Arduinos connect here, messages broadcast to all others ---
+
+
+
+# --- WebSocket: Arduinos connect with ?name=receiver ---
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, name: str = Query("unknown")):
     await websocket.accept()
-    connected_arduinos.append(websocket)
-    print(f"Arduino connected! Total: {len(connected_arduinos)}")
+    connected_arduinos[name] = websocket
+    print(f"Arduino '{name}' connected. Total: {len(connected_arduinos)}")
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"Relaying: {data}")
-            for arduino in connected_arduinos:
-                if arduino != websocket:
-                    await arduino.send_text(data)
+            print(f"[{name}] received: {data}")
+            try:
+                raw = json.loads(data)
+                if "speed" in raw and (name == "giver" or raw.get("device") == "giver"):
+                    clean.process_packet(raw)
+            except json.JSONDecodeError:
+                pass
     except WebSocketDisconnect:
-        connected_arduinos.remove(websocket)
-        print(f"Arduino disconnected. Total: {len(connected_arduinos)}")
+        connected_arduinos.pop(name, None)
+        print(f"Arduino '{name}' disconnected. Total: {len(connected_arduinos)}")
 
-# --- Manually send a message to all connected Arduinos ---
-@app.post("/send_to_arduino")
-async def send_to_arduino(payload: dict):
-    if not connected_arduinos:
-        return {"status": "error", "message": "No Arduino connected"}
 
-    message = payload.get("msg", "")
-    print(f"Sending to all Arduinos: {message}")
+# --- Send output.json to the receiver Arduino ---
+@app.post("/send_output")
+async def send_output():
+    if not os.path.exists(output_path):
+        return {"status": "error", "message": "output.json not found"}
 
-    for arduino in connected_arduinos:
-        await arduino.send_text(message)
+    with open(output_path) as f:
+        result = json.load(f)
 
-    return {"status": "sent", "message": message, "recipients": len(connected_arduinos)}
+    receiver = connected_arduinos.get("receiver")
+    if receiver:
+        await receiver.send_text(json.dumps(result))
+        return {"status": "sent", "result": result}
+    else:
+        return {"status": "receiver_not_connected", "result": result}
+
 
 # --- Audio upload from index.html ---
 @app.post("/upload_audio")
@@ -87,5 +161,21 @@ async def upload_audio(file: UploadFile = File(...)):
 
     with open("voice_data.json", "w") as f:
         json.dump({"transcript": transcript, "sentiment": sentiment}, f, indent=2)
+
+    try:
+        with open(input_path) as f:
+            existing = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        existing = {"speed": 0.0, "temperature": None, "touch": False}
+
+    output = {
+        "voice": {"transcript": transcript, "sentiment": sentiment},
+        "speed": existing.get("speed", 0.0),
+        "temperature": existing.get("temperature"),
+        "touch": existing.get("touch", False),
+    }
+    with open(input_path, "w") as f:
+        json.dump(output, f, indent=2)
+    print(f"[upload_audio] wrote input_data.json — watcher will trigger pipeline")
 
     return {"status": "received", "filename": filename, "transcript": transcript, "sentiment": sentiment}

@@ -1,0 +1,11 @@
+[
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": 0.0238,
+    "temperature": 22.875,
+    "touch": true
+  }
+]

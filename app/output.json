@@ -1,7 +1,10 @@
 {
-  "emotion": "calm",
-  "microseconds": 1900,
-  "touch": false,
-  "speed": 0.0266,
-  "temperature": 23.0625
+  "emotion": "seeking comfort",
+  "microseconds": 2200,
+  "touch": true,
+  "speed": {
+    "magnitude": 0.0,
+    "pattern": "unknown"
+  },
+  "temperature": null
 }

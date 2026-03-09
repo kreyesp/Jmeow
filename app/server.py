@@ -10,6 +10,7 @@ import shutil
 import json
 import os
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -44,9 +45,21 @@ output_path = os.path.join(BASE_DIR, "output.json")
 # Track connected Arduinos by name
 connected_arduinos: dict[str, WebSocket] = {}
 
+_last_pipeline_time: float = 0.0
+PIPELINE_COOLDOWN = 2.0  # seconds between pipeline runs
 
-async def run_pipeline():
-    """Run output.py then send output.json to the receiver Arduino."""
+
+async def run_pipeline(priority: bool = False):
+    """Run output.py then send output.json to the receiver Arduino.
+
+    priority=True bypasses the cooldown (used for touch and voice triggers).
+    """
+    global _last_pipeline_time
+    now = time.time()
+    if not priority and now - _last_pipeline_time < PIPELINE_COOLDOWN:
+        print(f"[pipeline] cooldown active, skipping ({PIPELINE_COOLDOWN}s between runs)")
+        return
+    _last_pipeline_time = now
     print("[pipeline] running output.py...")
     result = subprocess.run(
         ["python", os.path.join(BASE_DIR, "output.py")],
@@ -111,6 +124,8 @@ async def websocket_endpoint(websocket: WebSocket, name: str = Query("unknown"))
                 raw = json.loads(data)
                 if "speed" in raw and (name == "giver" or raw.get("device") == "giver"):
                     clean.process_packet(raw)
+                    if raw.get("touch"):
+                        asyncio.create_task(run_pipeline(priority=True))
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
@@ -176,6 +191,7 @@ async def upload_audio(file: UploadFile = File(...)):
     }
     with open(input_path, "w") as f:
         json.dump(output, f, indent=2)
-    print(f"[upload_audio] wrote input_data.json — watcher will trigger pipeline")
+    print(f"[upload_audio] wrote input_data.json — triggering pipeline (priority)")
+    asyncio.create_task(run_pipeline(priority=True))
 
     return {"status": "received", "filename": filename, "transcript": transcript, "sentiment": sentiment}

@@ -4,8 +4,104 @@
       "transcript": "",
       "sentiment": ""
     },
-    "speed": 0.0238,
-    "temperature": 22.875,
+    "speed": {
+      "magnitude": 120.2,
+      "pattern": "constant"
+    },
+    "temperature": {
+      "magnitude": 22.56,
+      "pattern": "constant"
+    },
+    "touch": false
+  },
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": {
+      "magnitude": 120.18,
+      "pattern": "constant"
+    },
+    "temperature": {
+      "magnitude": 22.6,
+      "pattern": "constant"
+    },
     "touch": true
+  },
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": {
+      "magnitude": 500.0,
+      "pattern": "increasing"
+    },
+    "temperature": {
+      "magnitude": 22.65,
+      "pattern": "constant"
+    },
+    "touch": false
+  },
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": {
+      "magnitude": 580.0,
+      "pattern": "increasing"
+    },
+    "temperature": {
+      "magnitude": 22.72,
+      "pattern": "constant"
+    },
+    "touch": false
+  },
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": {
+      "magnitude": 650.0,
+      "pattern": "increasing"
+    },
+    "temperature": {
+      "magnitude": 22.83,
+      "pattern": "constant"
+    },
+    "touch": false
+  },
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": {
+      "magnitude": 730.0,
+      "pattern": "increasing"
+    },
+    "temperature": {
+      "magnitude": 23.16,
+      "pattern": "constant"
+    },
+    "touch": false
+  },
+  {
+    "voice": {
+      "transcript": "",
+      "sentiment": ""
+    },
+    "speed": {
+      "magnitude": 810.0,
+      "pattern": "increasing"
+    },
+    "temperature": {
+      "magnitude": 23.67,
+      "pattern": "constant"
+    },
+    "touch": false
   }
 ]

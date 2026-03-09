@@ -11,22 +11,34 @@ input_path = os.path.join(os.path.dirname(__file__), "input_data.json")
 with open(input_path) as f:
     data = json.load(f)
 
-speed       = data.get("speed", 0.0)
-temperature = data.get("temperature")
+speed_data  = data.get("speed") or {}
+temp_data   = data.get("temperature")
 touch       = data.get("touch", False)
 voice       = data.get("voice") or {}
 transcript  = voice.get("transcript", "")
 sentiment   = voice.get("sentiment", "")
 
-active_signals = f"- motion speed (0.0-1.0, where 0.1+ is notable): {speed}\n"
+# speed and temperature are now {"magnitude": float, "pattern": str} dicts
+# (or None if not enough samples collected yet)
+speed_mag     = speed_data.get("magnitude", 0.0) if isinstance(speed_data, dict) else float(speed_data or 0)
+speed_pattern = speed_data.get("pattern", "unknown") if isinstance(speed_data, dict) else "unknown"
+temp_mag      = temp_data.get("magnitude") if isinstance(temp_data, dict) else temp_data
+temp_pattern  = temp_data.get("pattern", "unknown") if isinstance(temp_data, dict) else "unknown"
 
-if temperature is not None:
-    active_signals += f"- ambient temperature (C, baseline ~22, higher = warmer): {temperature}\n"
+active_signals = ""
+
+if speed_mag and speed_mag > 0:
+    active_signals += f"- motion speed: {speed_pattern} at magnitude {speed_mag:.1f} (raw sensor units, range 0–5000; >500 is notable)\n"
+if temp_mag is not None:
+    active_signals += f"- ambient temperature: {temp_pattern} at {temp_mag:.1f}°C (baseline ~22°C; higher = warmer/more tense)\n"
 if touch:
     active_signals += "- touch: detected\n"
 if transcript and sentiment:
     active_signals += f'- voice transcript: "{transcript}"\n'
     active_signals += f"- voice sentiment: {sentiment}\n"
+
+if not active_signals:
+    active_signals = "- no strong signals detected\n"
 
 prompt = f"""You are an emotion inference system for a wearable comfort device that controls micro servos.
 
@@ -36,10 +48,10 @@ Based on all active signals together, infer the user's emotional state and outpu
 Valid us range: 500-2500 (500 = fast/intense, 1500 = neutral, 2500 = slow/gentle).
 
 Guidelines:
-- motion speed (0.0-1.0): higher speed means more agitated emotion, use lower us (faster servo).
-- ambient temperature: warmer than baseline (>23C) suggests physical tension, use lower us.
-- touch detected: lean toward gentle comforting movement, use higher us.
-- voice sentiment: anxious/sad/mad use lower us; happy/love/calm use higher us.
+- motion speed: "constant" at high magnitude means sustained agitation → lower us; "increasing" means escalating → lower us; "decreasing" means calming → higher us.
+- ambient temperature: "constant" above baseline means ongoing tension → lower us; "increasing" means building stress → lower us.
+- touch detected: lean toward gentle comforting movement → higher us.
+- voice sentiment: anxious/sad/mad → lower us; happy/love/calm → higher us.
 - If only one signal is present, let it fully determine the output.
 - Combine all active signals into one unified emotion and one us value.
 
@@ -79,8 +91,8 @@ except json.JSONDecodeError as e:
 
 result["microseconds"] = max(500, min(2500, int(result["microseconds"])))
 result["touch"]       = bool(touch)
-result["speed"]       = round(speed, 4)
-result["temperature"] = temperature
+result["speed"]       = {"magnitude": round(speed_mag, 4), "pattern": speed_pattern}
+result["temperature"] = {"magnitude": temp_mag, "pattern": temp_pattern} if temp_mag is not None else None
 
 output_path = os.path.join(os.path.dirname(__file__), "output.json")
 with open(output_path, "w") as f:
